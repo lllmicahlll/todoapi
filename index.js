@@ -1,106 +1,116 @@
-'use strict'
+var express = require('express');
+var app = express();
+var fs = require('fs');
 
-const rand = require('csprng')
-const restify = require('restify')
-const server = restify.createServer()
-
-server.use(restify.plugins.fullResponse())
-server.use(restify.plugins.bodyParser())
-server.use(restify.plugins.authorizationParser())
-
-const status = {
-	'ok': 200,
-	'created': 201,
-	'notModified': 304,
-	'notFound': 404
-}
-
-const defaultPort = 8080
-
-const lists = []
-
-server.get('/', (req, res, next) => {
-	res.redirect('/lists', next)
+// todo list
+app.get('/todolist', function(req, res){
+    fs.readFile(__dirname + "/" + "db.json", 'utf8', function(err, data){
+        console.log(data);
+        res.send(data);
+    });
 })
 
-server.get('/lists', (req, res) => {
-	res.setHeader('content-type', 'application/json')
-	res.setHeader('Allow', 'GET, POST')
-	try {
-		if (lists.length === 0) throw new Error('no lists found')
-		const data = []
+// update todo list
+app.put('/updateTask', function(req, res){
+    var oldTaskName = req.query.oldTaskName.toString();
+    var newTaskName = req.query.newTaskName.toString();
+    function modifyJSON(oldTaskName, newTaskName) {
+        fs.readFile('./db.json', function (err, taskList) {
+            if (err) {
+                return console.error(err);
+            }
+            var data = taskList.toString();
+            data = JSON.parse(data);
+            for (var i = 0; i < data.taskList.length; i++) {
+                if (oldTaskName == data.taskList[i]) {
+                    console.log(oldTaskName);
+                    data.taskList[i] = newTaskName;
+                    console.log(newTaskName);
+                    console.log('change task')
+                }
+            }
+            console.log(data.taskList);
+            data.total = data.taskList.length;
+            var str = JSON.stringify(data);
 
-		for(let i=0; i<lists.length; i++) {
-			data.push({name: lists[i].name, id: lists[i].id})
-		}
-		res.send(status.ok, {lists: data})
-	} catch(err) {
-		console.log('/lists error')
-		res.send(status.notFound, {message: err.message})
-	} finally {
-		res.end()
-	}
+            fs.writeFile('./db.json', str, function (err) {
+                if (err) {
+                    console.error(err);
+                }
+                console.log('Modify task in taskList...')
+                res.send(data)
+            })
+        })
+    }
+    modifyJSON(oldTaskName, newTaskName)
 })
 
-server.get('/lists/:listID', (req, res) => {
-	const listID = req.params.listID
+app.delete('/deleteTask', function(req, res){
+    var taskName = req.query.taskName.toString();
 
-	res.setHeader('content-type', 'application/json')
-	res.setHeader('Allow', 'GET, POST')
-	try {
-		if (lists === undefined) throw new Error('no lists found')
-		let matchingID = -1
+    function deleteJSON(taskName) {
+        fs.readFile('./db.json', function (err, taskList) {
+            if (err) {
+                return console.error(err);
+            }
 
-		for (let i=0; i< lists.length; i++) {
-			if (lists[i].id === listID) matchingID = i
-		}
-		if(matchingID === -1) throw new Error(`list with id ${listID} not found`)
-		res.send(status.ok, lists[matchingID])
-	} catch(err) {
-		res.send(status.notFound, {message: err.message})
-	} finally {
-		res.end()
-	}
+            var data = taskList.toString();
+            data = JSON.parse(data);
+
+            for (var i = 0; i < data.taskList.length; i++) {
+                if (taskName == data.taskList[i]) {
+                    console.log(data.taskList[i])
+                    data.taskList.splice(i, 1);
+                    data.total = data.taskList.length;
+                }
+            }
+            console.log(data.taskList);
+            var str = JSON.stringify(data);
+
+            fs.writeFile('./db.json', str, function (err) {
+                if (err) {
+                    console.error(err);
+                }
+                console.log('delete task in taskList...');
+                res.send(data);
+            })
+        })
+    }
+    deleteJSON(taskName)
 })
 
-server.post('/lists', (req, res) => {
-	res.setHeader('content-type', 'application/json')
-	res.setHeader('Allow', 'GET, POST')
-	try {
-		if (req.body === undefined || typeof req.body.name !== 'string' || !Array.isArray(req.body.list)) {
-			throw new Error('invalid list data')
-		}
-		const list = { id: rand(130, 36), name: req.body.name, modified: new Date(), list: req.body.list }
-
-		lists.push(list)
-		res.send(status.created, list)
-	} catch(err) {
-		res.send(status.notFound, {message: err.message})
-	} finally {
-		res.end()
-	}
+app.post('/addTask', function(req, res){
+    var taskName = req.query.taskName
+    function writeJSON(taskName) {
+        // read json file
+        fs.readFile('./db.json', function (err, taskList) {
+            if (err) {
+                return console.error(err);
+            }
+            var data = taskList.toString();
+            data = JSON.parse(data);
+            data.taskList.push(taskName);
+            data.total = data.taskList.length;
+            console.log(data.taskList);
+            var str = JSON.stringify(data);
+            fs.writeFile('./db.json', str, function (err) {
+                if (err) {
+                    console.error(err);
+                }
+                console.log('Add new task to taskList...');
+                res.send(data);
+            })
+        })
+    }
+    writeJSON(taskName)
 })
 
-server.put('/lists/:listID', function(req, res) {
-	res.setHeader('content-type', 'application/json')
-	res.setHeader('Allow', 'GET, POST', 'PUT', 'DELETE')
-	res.send(status.ok, { message: 'this should update the specified resource'} )
-	res.end()
-})
 
-server.del('/lists/:listID', function(req, res) {
-	res.setHeader('content-type', 'application/json')
-	res.setHeader('Allow', 'GET, POST', 'PUT', 'DELETE')
-	res.send(status.ok, { message: 'this should delete the specified resource'} )
-	res.end()
-})
 
-const port = process.env.PORT || defaultPort
 
-server.listen(port, err => {
-	if (err) {
-		console.error(err)
-	} else {
-		console.log(`App is ready at : ${port}`)
-	}
+
+var server = app.listen(8080, function(){
+    var host = server.address().address
+    var port = server.address().port
+    console.log("REST API demo app listening at https://%s:%s", host, port)
 })
